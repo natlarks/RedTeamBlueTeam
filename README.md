@@ -2,7 +2,7 @@
 
 ## Overview
 
-This week I simulated both the offensive side and defensive side of security. I set up a Kali Linux VM to attack the Linux Metasploitable 2 VM. I used IPTables as my Firewall and Snort as my IDS. I am using Windows 10 as my host machine and VMWare as my hypervisor.
+This week I simulated both the offensive side and defensive side of security. I set up a Kali Linux VM to attack the Linux Metasploitable 2 VM. I used IPTables as my Firewall and Suricata NIDS as my IDS. I am using Windows 10 as my host machine and VMWare as my hypervisor.
 
 ## Installing The Attack VM - Kali Linux
 
@@ -46,3 +46,44 @@ As you can see, we use the same command as prior to install the firewall, yet we
 
 ![](https://media.giphy.com/media/6weYhJmcwLtUGa9Dzz/giphy.gif)
 
+## Setting Up IDS - Suricata
+1. Before we begin, we need to update our system and install required dependecies:
+  ```
+  apt-get update -y apt-get upgrade -y
+  apt-get install libpcre3-dbg libpcre3-dev autoconf automake libtool libpcap-dev libnet1-dev libyaml-dev libjansson4 libcap-ng-dev libmagic-dev libjansson-dev zlib1g-dev
+  apt-get install libnetfilter-queue-dev libnetfilter-queue1 libnfnetlink-dev
+  ``` 
+ 2. Since we are using command line, we are going to wget the source to get the tar.gz file:
+ ```wget https://www.openinfosecfoundation.org/download/suricata-3.2.tar.gz```
+ 3. We are going to extract the tar.gz and move into that directory:
+ ```tar -xvzf suricata-3.2.tar.gz```
+ 4. Then, we are going to build and install Suricata:
+ ```
+ ./configure --enable-nfqueue --prefix=/usr --sysconfdir=/etc --localstatedir=/var
+ make 
+ make install
+ ```
+ 5. Now that we have Suricata installed, we are going to install the rules:
+ ```make install-rules```
+ 6. In addition, we need to edit ```/etc/suricata/suricata.yaml``` for our network:
+ ```
+ vim /etc/suricata/suricata.yaml
+ HOME_NET: "[x.x.x.x]" 
+ EXTERNAL_NET: "!$HOME_NET"
+ ```
+ 
+ ## Testing the IDS - Suricata
+ Suricata has now been configured so let's test it!
+ 1. First, let's turn off the receivers offloads ```ethtool -K eth0 gro off lro off```
+ 2. Now let's add a rule! Open ```/etc/suricata/rules/test.rules``` in the text editor of your choice
+ 3. We are going to add a rule to this file to let us know of any Telnet requests:
+ ```alert tcp any any -> $HOME_NET 23 (msg:"TELNET connection attempt"; sid:1000003; rev:1;)```
+ 4. In ```/etc/suricata/suricata.yaml``` under ```rule-files``` add "- test.rules".
+ 5. Start Suricata:
+ ```/usr/bin/suricata -D -c /etc/suricata/suricata.yaml -i eth0```
+ 6. Switch back to our attack machine and let's try to telnet to the target machine!
+ ```telnet x.x.x.x```
+ 7. Switch again to the target VM and run ```tail -f /var/log/suricata/fast.log```
+ 8. At the end of the file it should be:
+ ```03/19/2018-01:47:49.846571 [**] [1:1000003:1] TELNET connection attempt [**] [Classification: (null)] [Priority: 3] {TCP} x.x.x.x:36922 -> x.x.x.x:23```
+ 
